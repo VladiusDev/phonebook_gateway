@@ -1,0 +1,4 @@
+.dart_tool/
+config.yaml
+gateway
+employees.db
