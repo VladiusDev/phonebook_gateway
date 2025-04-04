@@ -9,8 +9,9 @@ IP сервера и Port на котором будет стартовать в
 http_server:
   ip: "0.0.0.0"
   port: 8080
+```
 
-Данные для подключения к MySQL 
+Подключения к MySQL 
 ```yaml
 my_sql_server:
   host: "your host"
@@ -18,6 +19,7 @@ my_sql_server:
   user: "user"
   password: "user password"
   database: "database name 
+```
 
 ### ИСПОЛЬЗОВАНИЕ API
 Для использования API отправляем GET запрос на url [your ip]:[your port]/employees
