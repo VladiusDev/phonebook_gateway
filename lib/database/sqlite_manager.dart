@@ -1,3 +1,5 @@
+import 'package:sentry/sentry.dart';
+
 import '../models/employee.dart';
 import 'package:sqlite3/sqlite3.dart';
 
@@ -23,21 +25,25 @@ class SQLiteManager {
   }
 
   Future<void> updateEmployees(List<Employee> employees) async {
-    _database.execute('DELETE FROM employees');
+    try {
+      _database.execute('DELETE FROM employees');
 
-    final stmt = _database.prepare(
-        'INSERT INTO employees (employee, employee_lower, tel, organization) VALUES (?, ?, ?, ?)');
+      final stmt = _database.prepare(
+          'INSERT INTO employees (employee, employee_lower, tel, organization) VALUES (?, ?, ?, ?)');
 
-    for (var employee in employees) {
-      stmt.execute([
-        employee.name,
-        employee.name.toLowerCase(),
-        employee.tel,
-        employee.organization
-      ]);
+      for (var employee in employees) {
+        stmt.execute([
+          employee.name,
+          employee.name.toLowerCase(),
+          employee.tel,
+          employee.organization
+        ]);
+      }
+
+      stmt.dispose();
+    } catch (e, stack) {
+      Sentry.captureException(e, stackTrace: stack);
     }
-
-    stmt.dispose();
   }
 
   List<Employee> getEmployees([String? query]) {

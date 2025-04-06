@@ -1,17 +1,23 @@
-import 'package:emp_gateway/server.dart';
+import 'package:emp_gateway/config_manager.dart';
+import 'package:get_it/get_it.dart';
+import 'package:sentry/sentry.dart';
 import '../models/employee.dart';
 import 'package:mysql_client/mysql_client.dart';
 
 class MySQLConnector {
   Future<List<Employee>> fetchEmployees() async {
-    final config = EmployeeServer.loadConfig();
+    final config = GetIt.I<ConfigManager>();
 
     final conn = await MySQLConnection.createConnection(
-        host: config['mysql_host'],
-        port: config['mysql_port'],
-        userName: config['mysql_user'],
-        password: config['mysql_password'],
-        databaseName: config['mysql_database']);
+        host: config.mysqlHost,
+        port: config.mysqlPort,
+        userName: config.mysqlUser,
+        password: config.mysqlPassword,
+        databaseName: config.mysqlDatabase);
+
+    final transaction = Sentry.startTransaction('MySQL_Connector', 'Execute',
+        bindToScope: true);
+
     try {
       await conn.connect();
 
@@ -22,8 +28,15 @@ class MySQLConnector {
 
       await conn.close();
 
+      transaction.setData(
+          'mysql_status_info', '${DateTime.now()} Execute completed.');
+      await transaction.finish(status: SpanStatus.ok());
+
       return employees;
-    } catch (e) {
+    } catch (e, stack) {
+      await Sentry.captureException('${DateTime.now()} MySQL update failed: $e',
+          stackTrace: stack);
+
       throw Exception(e);
     }
   }

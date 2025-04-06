@@ -1,46 +1,51 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
+import 'package:emp_gateway/config_manager.dart';
+import 'package:get_it/get_it.dart';
+import 'package:sentry/sentry.dart';
 import 'package:shelf_cors_headers/shelf_cors_headers.dart';
-import 'package:yaml/yaml.dart';
 import 'database/mysql_connector.dart';
 import 'database/sqlite_manager.dart';
 import 'package:shelf/shelf.dart';
-import 'package:shelf/shelf_io.dart' as io;
 import 'package:shelf_router/shelf_router.dart';
-import 'package:path/path.dart' as path;
+import 'package:shelf/shelf_io.dart' as io;
 
 class EmployeeServer {
   final MySQLConnector mysqlConnector = MySQLConnector();
   final SQLiteManager sqliteManager = SQLiteManager();
 
   EmployeeServer() {
+    _syncEmployees();
+
     _startPeriodicSync();
   }
 
   void _startPeriodicSync() {
     Timer.periodic(const Duration(hours: 12), (timer) async {
       try {
-        print('${DateTime.now()} Sync employees started...');
-
-        final employees = await mysqlConnector.fetchEmployees();
-        await sqliteManager.updateEmployees(employees);
-
-        print('${DateTime.now()} Sync employees comleted.');
-      } catch (e) {
-        print('${DateTime.now()} Sync employees error: $e');
+        _syncEmployees();
+      } catch (e, stack) {
+        await Sentry.captureException(
+            '${DateTime.now()} Sync employees error: $e',
+            stackTrace: stack);
       }
     });
-
-    _syncEmployees();
   }
 
   Future<void> _syncEmployees() async {
     try {
+      final transaction =
+          Sentry.startTransaction('SYNC_EMPLOYEES', 'Start', bindToScope: true);
+      transaction.setData(
+          'sync_status_info', '${DateTime.now()} Server started');
+
       final employees = await mysqlConnector.fetchEmployees();
       await sqliteManager.updateEmployees(employees);
-    } catch (e) {
-      print('${DateTime.now()} Sync employees error: $e');
+
+      transaction.finish(status: SpanStatus.ok());
+    } catch (e, stack) {
+      Sentry.captureException('${DateTime.now()} Sync employees error: $e',
+          stackTrace: stack);
     }
   }
 
@@ -51,8 +56,6 @@ class EmployeeServer {
       final String? query = request.url.queryParameters['query']?.toLowerCase();
       final employees = sqliteManager.getEmployees(query);
       final jsonData = jsonEncode(employees.map((e) => e.toMap()).toList());
-
-      print('${DateTime.now()} GET request $query');
 
       return Response.ok(
         jsonData,
@@ -74,26 +77,25 @@ class EmployeeServer {
   }
 
   Future<void> start() async {
-    final config = loadConfig();
-    final server = await io.serve(handler, config['ip'], config['port']);
-    print(
-        '${DateTime.now()} Server started ${server.address.host}:${server.port}');
-  }
+    final transaction =
+        Sentry.startTransaction('HTTP_SERVER', 'Start', bindToScope: true);
 
-  static Map<String, dynamic> loadConfig() {
-    final binDir = path.dirname(Platform.resolvedExecutable);
-    final filePath = path.join(binDir, 'config.yaml');
-    final yaml = loadYaml(File(filePath).readAsStringSync()) as YamlMap;
+    try {
+      final config = GetIt.I<ConfigManager>();
+      final server = await io.serve(handler, config.ip, config.port);
 
-    return {
-      'ip': yaml['http_server']['ip'],
-      'port': yaml['http_server']['port'],
-      'mysql_host': yaml['my_sql_server']['host'],
-      'mysql_port': yaml['my_sql_server']['port'],
-      'mysql_user': yaml['my_sql_server']['user'],
-      'mysql_password': yaml['my_sql_server']['password'],
-      'mysql_database': yaml['my_sql_server']['database'],
-    };
+      transaction.setData('server_status_info',
+          '${DateTime.now()} Server started on ${server.address.host}:${server.port}');
+
+      await transaction.finish(status: SpanStatus.ok());
+
+      print(
+          '${DateTime.now()} Server started on ${server.address.host}:${server.port}');
+    } catch (e, stack) {
+      Sentry.captureException(e, stackTrace: stack);
+
+      print(e);
+    }
   }
 
   void dispose() {

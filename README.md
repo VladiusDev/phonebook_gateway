@@ -4,14 +4,13 @@
 ### НАСТРОЙКА КОНФИГА
 В корне проекта добавить config.yaml и указать параметры подключения:
 
-IP сервера и Port на котором будет стартовать веб сервер с API
+HTTP SERVER API
 ```yaml
 http_server:
   ip: "0.0.0.0"
   port: 8080
 ```
-
-Подключения к MySQL 
+MySQL 
 ```yaml
 my_sql_server:
   host: "your host"
@@ -19,6 +18,11 @@ my_sql_server:
   user: "user"
   password: "user password"
   database: "database name 
+```
+SENTRY 
+```yaml
+sentry:
+  dsn: "your dsn"
 ```
 
 ### ИСПОЛЬЗОВАНИЕ API
